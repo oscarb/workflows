@@ -1,0 +1,46 @@
+name: Reusable Aider Agent
+
+on:
+  workflow_call:
+    inputs:
+      issue_title:
+        required: true
+        type: string
+      issue_body:
+        required: true
+        type: string
+      issue_number:
+        required: true
+        type: number
+      target_files:
+        required: false
+        type: string
+        default: ""
+    secrets:
+      GEMINI_API_KEY:
+        required: true
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install aider-chat
+      - name: Run Aider
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          BRANCH="agent/issue-${{ inputs.issue_number }}"
+          git checkout -b "$BRANCH"
+          aider --model gemini/gemini-2.5-pro \
+                --message "${{ inputs.issue_title }}: ${{ inputs.issue_body }}" \
+                --yes ${{ inputs.target_files }}
+          git config user.name "github-actions[bot]"
+          git config user.email "bot@github.com"
+          git commit -am "resolve #${{ inputs.issue_number }}" || exit 0
+          git push origin "$BRANCH"
