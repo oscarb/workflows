@@ -23,14 +23,24 @@ on:
 jobs:
   run-agent:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write    
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.14.7'
-      - run: pip install aider-chat
+
+      - name: Install Aider
+        run: pip install aider-chat
+
       - name: Run Aider
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -38,9 +48,26 @@ jobs:
           BRANCH="agent/issue-${{ inputs.issue_number }}"
           git checkout -b "$BRANCH"
           aider --model gemini/gemini-2.5-pro \
+                --no-auto-commits \
                 --message "${{ inputs.issue_title }}: ${{ inputs.issue_body }}" \
                 --yes ${{ inputs.target_files }}
           git config user.name "github-actions[bot]"
-          git config user.email "bot@github.com"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -am "resolve #${{ inputs.issue_number }}" || exit 0
           git push origin "$BRANCH"
+
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --title "${{ inputs.issue_title }}" \
+            --body "Closes #${{ inputs.issue_number }}\n\nAutomated implementation via Gemini." \
+            --head "agent/issue-${{ inputs.issue_number }}" \
+            --base main
+
+      - name: Comment on Issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ inputs.issue_number }} --body "🚀 PR created: check open pull requests for details."
